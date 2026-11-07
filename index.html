@@ -1,149 +1,39 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#244b3d">
-<title>My Food Pantry</title>
-<link rel="manifest" href="manifest.webmanifest">
-<style>
-:root{color-scheme:light;--green:#244b3d;--pale:#eaf2ed;--ink:#18231e;--muted:#66736c;--line:#dce5df;--red:#a83e35}
-*{box-sizing:border-box}body{margin:0;background:#f5f7f5;color:var(--ink);font:16px system-ui,-apple-system,Segoe UI,sans-serif}
-header{background:var(--green);color:white;padding:22px 18px 26px;border-radius:0 0 24px 24px}
-header h1{margin:0;font-size:1.55rem}header p{margin:5px 0 0;color:#d8e7de;font-size:.92rem}
-main{max-width:680px;margin:0 auto;padding:16px;display:grid;gap:14px}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.stat,.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:15px}
-.stat span{display:block;color:var(--muted);font-size:.83rem}.stat strong{font-size:1.7rem}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-button{border:0;border-radius:12px;padding:13px 15px;font:600 1rem system-ui;cursor:pointer}
-.primary{background:var(--green);color:white}.secondary{background:var(--pale);color:var(--green)}.danger{background:#fbeceb;color:var(--red)}
-button:disabled{opacity:.45;cursor:not-allowed}
-h2{font-size:1.1rem;margin:0 0 12px}
-label{display:block;font-size:.88rem;color:var(--muted);margin:10px 0 5px}
-input{width:100%;padding:12px;border:1px solid #cbd7cf;border-radius:10px;font:inherit;background:white;color:var(--ink)}
-.row{display:flex;gap:8px;align-items:center}.row>*{min-width:0}.row input{flex:1}
-.food{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px 0;border-top:1px solid var(--line)}
-.food:first-child{border-top:0}.food-name{font-weight:650}.sub{font-size:.8rem;color:var(--muted);margin-top:3px}
-.count{font-weight:750;font-size:1.1rem;white-space:nowrap}.food-controls{display:flex;gap:6px;margin-top:7px}
-.small{padding:7px 11px;font-size:.88rem}.pill{font-size:.75rem;border-radius:99px;background:#fff0d9;color:#865b12;padding:4px 8px}
-#scanner{display:none}#video{width:100%;border-radius:12px;background:#111;max-height:330px;object-fit:cover}
-#scanStatus,.message{font-size:.88rem;color:var(--muted);margin-top:8px}
-.hidden{display:none!important}.empty{color:var(--muted);text-align:center;padding:22px 5px}
-footer{text-align:center;color:var(--muted);font-size:.76rem;padding:4px 16px 25px}
-@media(min-width:600px){header{padding-left:max(22px,calc((100vw - 644px)/2));}}
-</style>
-</head>
-<body>
-<header><h1>🥫 My Food Pantry</h1><p>Keep track of every can, one scan at a time.</p></header>
-<main>
-  <section class="stats">
-    <div class="stat"><span>Different foods</span><strong id="foodKinds">0</strong></div>
-    <div class="stat"><span>Total cans</span><strong id="totalCans">0</strong></div>
-  </section>
-
-  <section class="actions">
-    <button class="primary" id="openScanner">▦ Scan barcode</button>
-    <button class="secondary" id="showAdd">＋ Add food</button>
-  </section>
-
-  <section class="panel hidden" id="scanner">
-    <div class="row" style="justify-content:space-between"><h2>Scan a can</h2><button class="small secondary" id="closeScanner">Close</button></div>
-    <video id="video" playsinline muted></video>
-    <div id="scanStatus">Starting camera…</div>
-    <p class="sub">Hold the barcode steady inside the camera view. If scanning isn't supported, enter the barcode manually below.</p>
-    <label for="manualBarcode">Enter barcode manually</label>
-    <div class="row"><input id="manualBarcode" inputmode="numeric" autocomplete="off" placeholder="Barcode number"><button class="primary" id="manualLookup">Look up</button></div>
-  </section>
-
-  <section class="panel hidden" id="addPanel">
-    <div class="row" style="justify-content:space-between"><h2 id="formTitle">Add food</h2><button class="small secondary" id="cancelAdd">Close</button></div>
-    <label for="foodName">Food name</label><input id="foodName" placeholder="e.g. Green beans">
-    <label for="foodBarcode">Barcode</label><input id="foodBarcode" inputmode="numeric" placeholder="Scan or type barcode">
-    <label for="foodQty">Number of cans to add</label><input id="foodQty" type="number" min="1" step="1" value="1">
-    <p class="message" id="lookupMessage"></p>
-    <button class="primary" style="width:100%;margin-top:8px" id="saveFood">Save food</button>
-  </section>
-
-  <section class="panel">
-    <h2>Search inventory</h2>
-    <input id="search" placeholder="Search by food name or barcode…" autocomplete="off">
-    <div class="row" style="justify-content:space-between;margin-top:14px"><h2 style="margin:0">Your canned food</h2><span class="sub" id="resultCount"></span></div>
-    <div id="foodList"></div>
-  </section>
-</main>
-<footer>Your inventory is saved on this device in this browser. Export a backup regularly if the data is important.</footer>
-<script>
-const KEY='canned-food-inventory-v1';
-let foods=loadFoods(), stream=null, scanTimer=null, detector=null, editingBarcode='';
-const $=id=>document.getElementById(id);
-function loadFoods(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch{return []}}
-function save(){localStorage.setItem(KEY,JSON.stringify(foods));render()}
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function render(){
- $('foodKinds').textContent=foods.length;
- $('totalCans').textContent=foods.reduce((n,f)=>n+f.qty,0);
- const q=$('search').value.trim().toLowerCase();
- const list=foods.filter(f=>f.name.toLowerCase().includes(q)||f.barcode.includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
- $('resultCount').textContent=`${list.length} item${list.length===1?'':'s'}`;
- $('foodList').innerHTML=list.length?list.map(f=>`
- <div class="food"><div style="flex:1"><div class="food-name">${esc(f.name)}</div><div class="sub">Barcode: ${esc(f.barcode||'Not recorded')}</div>${f.qty<=3?'<div style="margin-top:6px"><span class="pill">Low stock</span></div>':''}
- <div class="food-controls"><button class="secondary small" data-add="${esc(f.barcode)}">＋ Add cans</button><button class="danger small" data-edit="${esc(f.barcode)}">Edit</button></div></div>
- <div style="text-align:right"><div class="count">${f.qty} cans</div><button class="primary small" style="margin-top:8px" data-use="${esc(f.barcode)}" ${f.qty===0?'disabled':''}>Use 1</button></div></div>`).join(''):'<div class="empty">No matching foods yet. Scan a can or add your first food.</div>';
-}
-function openAdd(barcode='',name=''){
- $('addPanel').classList.remove('hidden');$('scanner').classList.add('hidden');
- $('formTitle').textContent='Add food';editingBarcode='';
- $('foodName').value=name;$('foodBarcode').value=barcode;$('foodQty').value='1';$('lookupMessage').textContent='';
- $('foodName').focus();
-}
-function closeAdd(){$('addPanel').classList.add('hidden')}
-async function lookupBarcode(code){
- code=code.trim();if(!code)return;
- const existing=foods.find(f=>f.barcode===code);
- if(existing){closeScanner();closeAdd();$('search').value=existing.name;render();$('foodList').scrollIntoView({behavior:'smooth'});return}
- closeScanner();openAdd(code,'');
- $('lookupMessage').textContent='Looking up product name…';
- try{
-   const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_en,brands`);
-   const data=await r.json();const p=data.product;
-   if(data.status===1&&p){$('foodName').value=p.product_name_en||p.product_name||'';$('lookupMessage').textContent=$('foodName').value?'Product name found. Confirm it and enter your can count.':'Product found, but no name was provided. Enter it below.'}
-   else $('lookupMessage').textContent='Barcode not found in the product database. Enter the food name below.';
- }catch{$('lookupMessage').textContent='Could not reach the product database. Enter the food name below.'}
-}
-async function startScanner(){
- $('scanner').classList.remove('hidden');$('addPanel').classList.add('hidden');
- $('scanStatus').textContent='Requesting camera permission…';
- if(!navigator.mediaDevices?.getUserMedia){$('scanStatus').textContent='Camera access requires a supported browser and HTTPS. You can enter a barcode manually below.';return}
- if(!('BarcodeDetector' in window)){$('scanStatus').textContent='Automatic barcode scanning is not supported by this browser. Use manual barcode entry below.';return}
- try{
-  detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-  $('video').srcObject=stream;await $('video').play();$('scanStatus').textContent='Camera is on. Point it at a can barcode.';
-  scanTimer=setInterval(async()=>{try{const codes=await detector.detect($('video'));if(codes.length){$('manualBarcode').value=codes[0].rawValue;lookupBarcode(codes[0].rawValue)}}catch{}},350);
- }catch(e){$('scanStatus').textContent='Could not open camera. Check browser camera permission, or enter the barcode manually.'}
-}
-function closeScanner(){if(scanTimer)clearInterval(scanTimer);scanTimer=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;$('scanner').classList.add('hidden')}
-$('openScanner').onclick=startScanner;$('closeScanner').onclick=closeScanner;
-$('showAdd').onclick=()=>openAdd();$('cancelAdd').onclick=closeAdd;
-$('manualLookup').onclick=()=>lookupBarcode($('manualBarcode').value);
-$('manualBarcode').addEventListener('keydown',e=>{if(e.key==='Enter')lookupBarcode(e.target.value)});
-$('search').addEventListener('input',render);
-$('saveFood').onclick=()=>{
- const name=$('foodName').value.trim(),barcode=$('foodBarcode').value.trim(),qty=Number($('foodQty').value);
- if(!name||!Number.isInteger(qty)||qty<1){$('lookupMessage').textContent='Enter a food name and a whole number of cans (at least 1).';return}
- const existing=foods.find(f=>barcode&&f.barcode===barcode);
- if(existing){existing.qty+=qty;existing.name=name}else foods.push({name,barcode:barcode||('manual-'+Date.now()),qty});
- save();closeAdd();$('search').value='';render();
-};
-$('foodList').addEventListener('click',e=>{
- const use=e.target.closest('[data-use]');const add=e.target.closest('[data-add]');const edit=e.target.closest('[data-edit]');
- if(use){const f=foods.find(x=>x.barcode===use.dataset.use);if(f&&f.qty>0){f.qty--;save()}}
- if(add){const f=foods.find(x=>x.barcode===add.dataset.add);if(f)openAdd(f.barcode,f.name)}
- if(edit){const f=foods.find(x=>x.barcode===edit.dataset.edit);if(f){openAdd(f.barcode,f.name);$('formTitle').textContent='Update food';$('foodQty').value='1';$('lookupMessage').textContent='Saving adds the entered quantity to this food.'}}
-});
-if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
-render();
-</script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#244b3d"><title>My Food Pantry</title><link rel="manifest" href="manifest.webmanifest"><style>
+:root{--g:#244b3d;--p:#eaf2ed;--line:#dce5df;--muted:#66736c}*{box-sizing:border-box}body{margin:0;background:#f5f7f5;color:#18231e;font:16px system-ui}header{background:var(--g);color:white;padding:22px;border-radius:0 0 22px 22px}main{max-width:650px;margin:auto;padding:15px;display:grid;gap:13px}.panel,.stat{background:white;border:1px solid var(--line);border-radius:15px;padding:15px}.stats,.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat span,.hint,.sub{display:block;color:var(--muted);font-size:.82rem}.stat strong{font-size:1.7rem}button{border:0;border-radius:10px;padding:12px;font:600 1rem system-ui}.primary{background:var(--g);color:white}.secondary{background:var(--p);color:var(--g)}.small{padding:7px 10px;font-size:.85rem}input{width:100%;padding:12px;border:1px solid #cbd7cf;border-radius:9px;font:inherit;margin:5px 0 10px}.row{display:flex;align-items:center;gap:8px;justify-content:space-between}.row input{flex:1}.hidden{display:none!important}.food{display:flex;justify-content:space-between;gap:10px;padding:13px 0;border-top:1px solid var(--line)}.food:first-child{border:0}.count{font-weight:700}.message{font-size:.85rem;color:#8a4c12}.pill{font-size:.75rem;color:#865b12;background:#fff0d9;border-radius:20px;padding:3px 7px}video{width:100%;border-radius:12px;display:block;background:#111;min-height:230px;max-height:380px;object-fit:cover}
+.camera-wrap{position:relative;background:#111;border-radius:12px;overflow:hidden}
+.scan-frame{position:absolute;left:12%;right:12%;top:30%;height:34%;border:3px solid #8be0a7;border-radius:14px;box-shadow:0 0 0 999px #0005;pointer-events:none}
+.scan-tip{position:absolute;left:10px;right:10px;bottom:10px;text-align:center;color:white;background:#0009;border-radius:9px;padding:7px;font-size:.82rem}
+.scan-result{background:#eaf2ed;border:1px solid #c9ded0;border-radius:12px;padding:12px;margin-top:10px}
+.scan-result strong{display:block;color:#244b3d;font-size:1rem}
+footer{text-align:center;color:var(--muted);font-size:.75rem;padding:15px}
+</style></head><body><header><h1>🥫 My Food Pantry</h1><div>Shared family canned food inventory</div></header><main>
+<section class="panel" id="authPanel"><h2>Family sign in</h2><p class="hint">Each family member signs in with their own account.</p><label>Email</label><input id="email" type="email"><label>Password</label><input id="password" type="password"><div class="row"><button class="primary" id="signIn">Sign in</button><button class="secondary" id="create">Create account</button></div><p class="message" id="authMsg">Firebase setup is required before accounts can connect.</p></section>
+<div id="app" class="hidden"><section class="panel row"><div><b id="who"></b><div class="hint" id="sync">Connecting…</div></div><button class="secondary small" id="logout">Sign out</button></section>
+<section class="stats"><div class="stat"><span>Different foods</span><strong id="kinds">0</strong></div><div class="stat"><span>Total cans</span><strong id="total">0</strong></div></section>
+<section class="actions"><button class="primary" id="scanBtn">▦ Scan barcode</button><button class="secondary" id="addBtn">＋ Add food</button></section>
+<section class="panel hidden" id="scanner"><div class="row"><h3>Scan a can</h3><button class="secondary small" id="closeScan">Close</button></div><div class="camera-wrap"><video id="video" playsinline muted></video><div class="scan-frame"></div><div class="scan-tip">Center the barcode inside the green box</div></div><p id="scanStatus" class="hint">Camera preview will appear here.</p><div id="scanResult" class="scan-result hidden"><strong id="scanName">Barcode detected</strong><span id="scanCode" class="hint"></span></div><div class="row"><button class="secondary small" id="rescan" type="button">Scan another</button><button class="secondary small" id="switchManual" type="button">Enter barcode manually</button></div><label>Or enter barcode</label><div class="row"><input id="manual" placeholder="Barcode" inputmode="numeric"><button class="primary" id="lookup">Look up</button></div></section>
+<section class="panel hidden" id="addPanel"><div class="row"><h3>Add food</h3><button class="secondary small" id="closeAdd">Close</button></div><label>Food name</label><input id="foodName" placeholder="Green beans"><label>Barcode</label><input id="barcode" placeholder="Barcode number"><label>Number of cans to add</label><input id="qty" type="number" min="1" value="1"><p id="productMsg" class="message"></p><button class="primary" id="save" style="width:100%">Save food</button></section>
+<section class="panel"><h3>Search inventory</h3><input id="search" placeholder="Food name or barcode"><div class="row"><h3>Your family pantry</h3><span id="resultCount" class="hint"></span></div><div id="list"></div></section></div></main><footer>Shared online inventory. Only authorized family accounts can access it.</footer>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getFirestore,collection,doc,setDoc,onSnapshot,query,orderBy,serverTimestamp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+// Replace these placeholders with the Firebase web app config from Project settings > Your apps.
+const firebaseConfig={apiKey:"PASTE_API_KEY",authDomain:"PASTE_PROJECT_ID.firebaseapp.com",projectId:"PASTE_PROJECT_ID",storageBucket:"PASTE_PROJECT_ID.appspot.com",messagingSenderId:"PASTE_MESSAGING_SENDER_ID",appId:"PASTE_APP_ID"};
+const ready=!Object.values(firebaseConfig).some(x=>x.startsWith("PASTE_"));const $=x=>document.getElementById(x);let auth,db,items=[],stop=null,stream=null,timer=null;
+if(ready){const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);onAuthStateChanged(auth,u=>{if(stop){stop();stop=null}if(u){$("authPanel").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=u.email;stop=onSnapshot(query(collection(db,"pantryItems"),orderBy("name")),s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));$("sync").textContent="Live sync connected";render()},e=>$("sync").textContent="Access/sync error: "+e.message)}else{$("app").classList.add("hidden");$("authPanel").classList.remove("hidden");items=[];render()}})}else{$("signIn").disabled=$("create").disabled=true;$("authMsg").textContent="Not connected yet. Follow FIREBASE-SETUP.md and paste your Firebase config into index.html."}
+$("signIn").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){$("authMsg").textContent=e.message}};
+$("create").onclick=async()=>{try{await createUserWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);$("authMsg").textContent="Account created. The owner must authorize this account in Firebase before it can access the pantry."}catch(e){$("authMsg").textContent=e.message}};
+$("logout").onclick=()=>signOut(auth);
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function render(){let q=$("search").value.toLowerCase().trim(),arr=items.filter(x=>x.name.toLowerCase().includes(q)||(x.barcode||"").includes(q));$("kinds").textContent=items.length;$("total").textContent=items.reduce((n,x)=>n+(+x.qty||0),0);$("resultCount").textContent=arr.length+" items";$("list").innerHTML=arr.length?arr.map(x=>`<div class="food"><div><b>${esc(x.name)}</b><div class="sub">Barcode: ${esc(x.barcode||"—")}</div>${x.qty<=3?'<span class="pill">Low stock</span>':""}<div><button class="secondary small" data-add="${esc(x.id)}">＋ Add cans</button></div></div><div style="text-align:right"><div class="count">${x.qty} cans</div><button class="primary small" data-use="${esc(x.id)}" ${x.qty<1?"disabled":""}>Use 1</button></div></div>`).join(""):'<p class="hint">No matching foods.</p>'}
+function openAdd(code="",name=""){$("addPanel").classList.remove("hidden");$("scanner").classList.add("hidden");$("barcode").value=code;$("foodName").value=name;$("qty").value=1;$("productMsg").textContent=""}
+async function lookup(code){code=code.trim();if(!code)return;let old=items.find(x=>x.barcode===code);closeScanner();if(old){$("search").value=old.name;render();return}openAdd(code);$("productMsg").textContent="Looking up product…";try{let r=await fetch("https://world.openfoodfacts.org/api/v2/product/"+encodeURIComponent(code)+".json?fields=product_name,product_name_en"),d=await r.json();$("foodName").value=d.product?(d.product.product_name_en||d.product.product_name||""):"";$("productMsg").textContent=$("foodName").value?"Confirm the name and enter can count.":"No product name found; enter it manually."}catch{$("productMsg").textContent="Product lookup unavailable; enter name manually."}}
+async function scan(){ $("scanner").classList.remove("hidden");$("addPanel").classList.add("hidden");if(!navigator.mediaDevices?.getUserMedia||!("BarcodeDetector"in window)){$("scanStatus").textContent="Camera scanning unsupported here; enter barcode manually.";return}try{let det=new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e"]});stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}});$("video").srcObject=stream;await $("video").play();$("scanStatus").textContent="Point camera at barcode.";timer=setInterval(async()=>{let a=await det.detect($("video"));if(a.length){const code=a[0].rawValue;showDetected(code);clearInterval(timer);timer=null;setTimeout(()=>lookup(code),450)}},400)}catch{$("scanStatus").textContent="Camera unavailable; enter barcode manually."}}
+function closeScanner(){if(timer)clearInterval(timer);timer=null;if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$("video").srcObject=null;$("scanner").classList.add("hidden")}
+function showDetected(code){$("scanResult").classList.remove("hidden");$("scanName").textContent="Barcode detected";$("scanCode").textContent="Barcode: "+code;$("scanStatus").textContent="Barcode found. Looking up the food…"}
+$("scanBtn").onclick=scan;$("closeScan").onclick=closeScanner;$("rescan").onclick=()=>{closeScanner();$("scanResult").classList.add("hidden");scan()};$("switchManual").onclick=()=>{$("manual").focus()};$("lookup").onclick=()=>lookup($("manual").value);$("manual").onkeydown=e=>{if(e.key==="Enter")lookup(e.target.value)};$("addBtn").onclick=()=>openAdd();$("closeAdd").onclick=()=>$("addPanel").classList.add("hidden");$("search").oninput=render;
+$("save").onclick=async()=>{let name=$("foodName").value.trim(),barcode=$("barcode").value.trim(),qty=Number($("qty").value);if(!name||!Number.isInteger(qty)||qty<1){$("productMsg").textContent="Enter a name and whole number of cans.";return}try{let old=items.find(x=>barcode&&x.barcode===barcode),id=old?old.id:(barcode||crypto.randomUUID());await setDoc(doc(db,"pantryItems",id),{name,barcode,qty:(old?.qty||0)+qty,updatedAt:serverTimestamp()});$("addPanel").classList.add("hidden")}catch(e){$("productMsg").textContent="Save failed: "+e.message}};
+$("list").onclick=async e=>{let u=e.target.closest("[data-use]"),a=e.target.closest("[data-add]");try{if(u){let f=items.find(x=>x.id===u.dataset.use);if(f&&f.qty>0)await setDoc(doc(db,"pantryItems",f.id),{name:f.name,barcode:f.barcode||"",qty:f.qty-1,updatedAt:serverTimestamp()})}if(a){let f=items.find(x=>x.id===a.dataset.add);if(f)openAdd(f.barcode,f.name)}}catch(err){alert(err.message)}};
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+</script></body></html>
