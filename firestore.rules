@@ -1,13 +1,19 @@
 rules_version = '2';
 service cloud.firestore {
- match /databases/{database}/documents {
-  function member() {
-   return request.auth != null && exists(/databases/$(database)/documents/pantryMembers/$(request.auth.uid));
+  match /databases/{database}/documents {
+    function member() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/pantryMembers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/pantryMembers/$(request.auth.uid)).data.authorized == true;
+    }
+
+    match /pantryItems/{itemId} {
+      allow read, write: if member();
+    }
+
+    match /pantryMembers/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
   }
-  match /pantryItems/{itemId} { allow read, write: if member(); }
-  match /pantryMembers/{uid} {
-   allow read: if request.auth != null && request.auth.uid == uid;
-   allow write: if false;
-  }
- }
 }
