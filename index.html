@@ -19,7 +19,15 @@ import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-ap
 import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import{getFirestore,collection,doc,setDoc,onSnapshot,query,orderBy,serverTimestamp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 // Replace these placeholders with the Firebase web app config from Project settings > Your apps.
-const firebaseConfig={apiKey:"PASTE_API_KEY",authDomain:"PASTE_PROJECT_ID.firebaseapp.com",projectId:"PASTE_PROJECT_ID",storageBucket:"PASTE_PROJECT_ID.appspot.com",messagingSenderId:"PASTE_MESSAGING_SENDER_ID",appId:"PASTE_APP_ID"};
+const firebaseConfig = {
+  apiKey: "AIzaSyBcef_jFFUawvO-tHiW9nJiKka0uHsj548",
+  authDomain: "my-food-pantry-b8001.firebaseapp.com",
+  projectId: "my-food-pantry-b8001",
+  storageBucket: "my-food-pantry-b8001.firebasestorage.app",
+  messagingSenderId: "356547486261",
+  appId: "1:356547486261:web:4159e860ae78d149adc77c",
+  measurementId: "G-NP4JSD3REV"
+};
 const ready=!Object.values(firebaseConfig).some(x=>x.startsWith("PASTE_"));const $=x=>document.getElementById(x);let auth,db,items=[],stop=null,stream=null,timer=null;
 if(ready){const app=initializeApp(firebaseConfig);auth=getAuth(app);db=getFirestore(app);onAuthStateChanged(auth,u=>{if(stop){stop();stop=null}if(u){$("authPanel").classList.add("hidden");$("app").classList.remove("hidden");$("who").textContent=u.email;stop=onSnapshot(query(collection(db,"pantryItems"),orderBy("name")),s=>{items=s.docs.map(d=>({id:d.id,...d.data()}));$("sync").textContent="Live sync connected";render()},e=>$("sync").textContent="Access/sync error: "+e.message)}else{$("app").classList.add("hidden");$("authPanel").classList.remove("hidden");items=[];render()}})}else{$("signIn").disabled=$("create").disabled=true;$("authMsg").textContent="Not connected yet. Follow FIREBASE-SETUP.md and paste your Firebase config into index.html."}
 $("signIn").onclick=async()=>{try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value)}catch(e){$("authMsg").textContent=e.message}};
